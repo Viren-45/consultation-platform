@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Source_Sans_3 as FontSans } from "next/font/google";
 import "./globals.css";
-import Navbar from "@/components/common/navbar";
+import ConditionalNavbar from "@/components/common/conditional-navbar";
 
 const fontSans = FontSans({
   variable: "--font-sans",
@@ -37,7 +37,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${fontSans.variable} font-sans antialiased`}>
-        <Navbar />
+        <ConditionalNavbar />
         <main className="min-h-screen">
           {children}
         </main>
