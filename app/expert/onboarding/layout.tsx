@@ -1,16 +1,18 @@
 // app/expert/onboarding/layout.tsx
 import React from 'react';
+import OnboardingHeader from '@/components/onboarding/layout/onboarding-header';
 
 interface OnboardingLayoutProps {
   children: React.ReactNode;
 }
 
-export default function OnboardingLayout({ children }: OnboardingLayoutProps) {
+export default function OnboardingLayoutWrapper({ children }: OnboardingLayoutProps) {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-2xl mx-auto px-6 py-12">
+    <>
+      <OnboardingHeader />
+      <main className="mt-20">
         {children}
       </main>
-    </div>
+    </>
   );
 }

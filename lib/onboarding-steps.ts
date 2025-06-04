@@ -1,18 +1,16 @@
 // lib/onboarding-steps.ts
 export const ONBOARDING_STEPS = {
   profile: 1,
-  expertise: 2,
-  availability: 3,
-  pricing: 4,
-  review: 5,
+  availability: 2,
+  pricing: 3,
+  review: 4,
 } as const;
 
 export const STEP_NAMES = {
   1: "profile",
-  2: "expertise",
-  3: "availability",
-  4: "pricing",
-  5: "review",
+  2: "availability",
+  3: "pricing",
+  4: "review",
 } as const;
 
 export type OnboardingStep = keyof typeof ONBOARDING_STEPS;
@@ -28,7 +26,6 @@ export const getStepName = (stepNumber: StepNumber): OnboardingStep => {
 
 export const STEP_TITLES = {
   profile: "Build Your Profile",
-  expertise: "Share Your Expertise",
   availability: "Set Your Availability",
   pricing: "Set Your Rates",
   review: "Review & Launch",

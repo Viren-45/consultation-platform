@@ -1,10 +1,9 @@
+// lib/onboarding/profile.ts
 import supabase from "@/lib/supabase-client";
 
 export interface ProfileUpdateData {
   firstName?: string;
   lastName?: string;
-  professionalHeadline?: string;
-  bio?: string;
   profilePictureUrl?: string;
 }
 
@@ -12,6 +11,12 @@ export interface ProfileUploadResult {
   success: boolean;
   error?: string;
   profilePictureUrl?: string;
+}
+
+export interface LinkedInUploadResult {
+  success: boolean;
+  error?: string;
+  linkedinPdfUrl?: string;
 }
 
 // Upload profile picture to Supabase Storage
@@ -38,7 +43,7 @@ export const uploadProfilePicture = async (
       };
     }
 
-    // Create unique filename
+    // Create unique filename with timestamp
     const fileExt = file.name.split(".").pop();
     const fileName = `${Date.now()}.${fileExt}`;
     const filePath = `${userId}/${fileName}`;
@@ -62,7 +67,7 @@ export const uploadProfilePicture = async (
       };
     }
 
-    // Get public URL
+    // Get public URL for the uploaded image
     const { data: urlData } = supabase.storage
       .from("profile-pictures")
       .getPublicUrl(filePath);
@@ -74,7 +79,7 @@ export const uploadProfilePicture = async (
       };
     }
 
-    // Update user profile with new picture URL
+    // Update user profile with new picture URL in database
     const { error: updateError } = await supabase
       .from("user_profiles")
       .update({
@@ -85,7 +90,7 @@ export const uploadProfilePicture = async (
 
     if (updateError) {
       console.error("Database update error:", updateError);
-      // Try to clean up uploaded file
+      // Clean up uploaded file if database update fails
       await supabase.storage.from("profile-pictures").remove([filePath]);
 
       return {
@@ -107,10 +112,99 @@ export const uploadProfilePicture = async (
   }
 };
 
+// Upload LinkedIn PDF to Supabase Storage
+export const uploadLinkedInPDF = async (
+  userId: string,
+  file: File
+): Promise<LinkedInUploadResult> => {
+  try {
+    // Validate file type - only PDF allowed
+    if (file.type !== "application/pdf") {
+      return {
+        success: false,
+        error: "Please upload a PDF file only",
+      };
+    }
+
+    // Validate file size (max 10MB for PDFs)
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > maxSize) {
+      return {
+        success: false,
+        error: "PDF file size must be less than 10MB",
+      };
+    }
+
+    // Use fixed filename for easy replacement
+    const fileName = "linkedin_profile.pdf";
+    const filePath = `${userId}/${fileName}`;
+
+    // Upload file to Supabase Storage (upsert: true will replace existing file)
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("linkedin-pdfs")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: true, // This replaces existing file with same path
+      });
+
+    if (uploadError) {
+      console.error("LinkedIn PDF upload error:", uploadError);
+      return {
+        success: false,
+        error: "Failed to upload LinkedIn PDF. Please try again.",
+      };
+    }
+
+    // Get public URL for the uploaded PDF (for internal use)
+    const { data: urlData } = supabase.storage
+      .from("linkedin-pdfs")
+      .getPublicUrl(filePath);
+
+    if (!urlData?.publicUrl) {
+      return {
+        success: false,
+        error: "Failed to generate PDF URL",
+      };
+    }
+
+    // Update user profile with LinkedIn PDF URL in database
+    const { error: updateError } = await supabase
+      .from("user_profiles")
+      .update({
+        linkedin_pdf_url: urlData.publicUrl,
+        linkedin_pdf_uploaded: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    if (updateError) {
+      console.error("Database update error for LinkedIn PDF:", updateError);
+      // Clean up uploaded file if database update fails
+      await supabase.storage.from("linkedin-pdfs").remove([filePath]);
+
+      return {
+        success: false,
+        error: "Failed to save LinkedIn PDF reference. Please try again.",
+      };
+    }
+
+    return {
+      success: true,
+      linkedinPdfUrl: urlData.publicUrl,
+    };
+  } catch (error) {
+    console.error("Unexpected error uploading LinkedIn PDF:", error);
+    return {
+      success: false,
+      error: "An unexpected error occurred. Please try again.",
+    };
+  }
+};
+
 // Delete existing profile picture from storage
 const deleteExistingProfilePicture = async (userId: string): Promise<void> => {
   try {
-    // Get current profile picture URL
+    // Get current profile picture URL from database
     const { data: profile } = await supabase
       .from("user_profiles")
       .select("profile_picture_url")
@@ -132,7 +226,53 @@ const deleteExistingProfilePicture = async (userId: string): Promise<void> => {
   }
 };
 
-// Update profile data (without picture)
+// Delete LinkedIn PDF from storage and database
+export const deleteLinkedInPDF = async (
+  userId: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    // Define the file path (fixed filename)
+    const filePath = `${userId}/linkedin_profile.pdf`;
+
+    // Delete from storage
+    const { error: storageError } = await supabase.storage
+      .from("linkedin-pdfs")
+      .remove([filePath]);
+
+    if (storageError) {
+      console.error("Error deleting LinkedIn PDF from storage:", storageError);
+      // Continue anyway - file might not exist
+    }
+
+    // Update database to remove LinkedIn PDF references
+    const { error: updateError } = await supabase
+      .from("user_profiles")
+      .update({
+        linkedin_pdf_url: null,
+        linkedin_pdf_uploaded: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    if (updateError) {
+      console.error("Error removing LinkedIn PDF from database:", updateError);
+      return {
+        success: false,
+        error: "Failed to remove LinkedIn PDF. Please try again.",
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error deleting LinkedIn PDF:", error);
+    return {
+      success: false,
+      error: "An unexpected error occurred. Please try again.",
+    };
+  }
+};
+
+// Update profile data (without pictures/PDFs)
 export const updateProfile = async (
   userId: string,
   data: ProfileUpdateData
@@ -142,11 +282,9 @@ export const updateProfile = async (
       updated_at: new Date().toISOString(),
     };
 
+    // Only update provided fields
     if (data.firstName) updateData.first_name = data.firstName;
     if (data.lastName) updateData.last_name = data.lastName;
-    if (data.professionalHeadline)
-      updateData.professional_headline = data.professionalHeadline;
-    if (data.bio) updateData.bio = data.bio;
     if (data.profilePictureUrl)
       updateData.profile_picture_url = data.profilePictureUrl;
 
@@ -173,7 +311,7 @@ export const updateProfile = async (
   }
 };
 
-// Get profile data
+// Get profile data including LinkedIn PDF status
 export const getProfile = async (userId: string) => {
   try {
     const { data, error } = await supabase
@@ -183,9 +321,9 @@ export const getProfile = async (userId: string) => {
         id,
         first_name,
         last_name,
-        professional_headline,
-        bio,
         profile_picture_url,
+        linkedin_pdf_url,
+        linkedin_pdf_uploaded,
         user_type,
         onboarding_completed,
         onboarding_step,
@@ -240,5 +378,49 @@ export const deleteProfilePicture = async (
       success: false,
       error: "An unexpected error occurred. Please try again.",
     };
+  }
+};
+
+// Check if user has uploaded LinkedIn PDF
+export const hasLinkedInPDF = async (userId: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .select("linkedin_pdf_uploaded")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      console.error("Error checking LinkedIn PDF status:", error);
+      return false;
+    }
+
+    return data?.linkedin_pdf_uploaded || false;
+  } catch (error) {
+    console.error("Unexpected error checking LinkedIn PDF status:", error);
+    return false;
+  }
+};
+
+// Get LinkedIn PDF download URL for processing
+export const getLinkedInPDFUrl = async (
+  userId: string
+): Promise<string | null> => {
+  try {
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .select("linkedin_pdf_url")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      console.error("Error fetching LinkedIn PDF URL:", error);
+      return null;
+    }
+
+    return data?.linkedin_pdf_url || null;
+  } catch (error) {
+    console.error("Unexpected error fetching LinkedIn PDF URL:", error);
+    return null;
   }
 };

@@ -11,7 +11,11 @@ const ConditionalNavbar = () => {
     '/get-started',
     '/sign-up',
     '/sign-in',
-    '/expert/onboarding/profile'
+    '/expert/onboarding/profile',
+    '/expert/onboarding/calendly',
+    '/expert/onboarding/availability',
+    '/expert/onboarding/session-details',
+    '/expert/onboarding/processing',
   ];
   
   // Check if current path should hide navbar
