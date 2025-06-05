@@ -1,53 +1,42 @@
 // app/api/calendly/integration/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseServer as supabase } from "@/lib/supabase-server";
+import {
+  calendlyIntegrationStatusSchema,
+  calendlyTokenRefreshSchema,
+} from "@/lib/validations/calendly";
+import {
+  getCalendlyIntegration,
+  disconnectCalendlyIntegration,
+  refreshCalendlyToken,
+} from "@/lib/onboarding/calendly";
 
 /**
  * GET: Check if user has Calendly integration
- * Returns integration status and basic info
  */
 export async function GET(request: NextRequest) {
   try {
-    // Get user ID from URL parameters
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("user_id");
 
-    if (!userId) {
-      return NextResponse.json({ error: "Missing user ID" }, { status: 400 });
-    }
-
-    // Get user's Calendly integration
-    const { data: integration, error } = await supabase
-      .from("calendly_integrations")
-      .select(
-        "calendly_username, calendly_email, calendly_name, scheduling_url, timezone, integration_status, created_at"
-      )
-      .eq("user_id", userId)
-      .eq("integration_status", "active")
-      .single();
-
-    if (error && error.code !== "PGRST116") {
-      // PGRST116 = no rows returned
-      throw error;
-    }
-
-    // Return integration status
-    return NextResponse.json({
-      connected: !!integration,
-      integration: integration
-        ? {
-            username: integration.calendly_username,
-            email: integration.calendly_email,
-            name: integration.calendly_name,
-            status: integration.integration_status,
-            connectedAt: integration.created_at,
-            schedulingUrl: integration.scheduling_url,
-            timezone: integration.timezone,
-          }
-        : null,
+    // Validate input
+    const validatedData = calendlyIntegrationStatusSchema.parse({
+      user_id: userId,
     });
+
+    // Get integration status
+    const result = await getCalendlyIntegration(validatedData.user_id);
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Get Calendly integration error:", error);
+
+    if (error instanceof Error && error.message.includes("validation")) {
+      return NextResponse.json(
+        { error: "Invalid request parameters" },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
       { error: "Failed to get integration status" },
       { status: 500 }
@@ -57,60 +46,38 @@ export async function GET(request: NextRequest) {
 
 /**
  * DELETE: Disconnect Calendly integration
- * Sets integration status to disabled AND disables availability
  */
 export async function DELETE(request: NextRequest) {
   try {
-    // Get user ID from URL parameters
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("user_id");
 
-    if (!userId) {
-      return NextResponse.json({ error: "Missing user ID" }, { status: 400 });
-    }
+    // Validate input
+    const validatedData = calendlyIntegrationStatusSchema.parse({
+      user_id: userId,
+    });
 
-    // Update integration status to disabled
-    const { error: integrationError } = await supabase
-      .from("calendly_integrations")
-      .update({
-        integration_status: "disabled",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId);
+    // Disconnect integration
+    const result = await disconnectCalendlyIntegration(validatedData.user_id);
 
-    if (integrationError) {
-      throw integrationError;
-    }
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("Delete Calendly integration error:", error);
 
-    // Also disable the expert availability
-    const { error: availabilityError } = await supabase
-      .from("expert_availability")
-      .update({
-        is_active: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId);
-
-    // Don't throw error if availability doesn't exist yet (user might disconnect before saving)
-    if (availabilityError && availabilityError.code !== "PGRST116") {
-      console.warn(
-        "Could not update availability during disconnect:",
-        availabilityError
+    if (error instanceof Error && error.message.includes("validation")) {
+      return NextResponse.json(
+        { error: "Invalid request parameters" },
+        { status: 400 }
       );
     }
 
-    console.log(
-      `Successfully disconnected Calendly integration for user: ${userId}`
-    );
-
-    return NextResponse.json({
-      success: true,
-      message: "Integration disconnected successfully",
-    });
-  } catch (error) {
-    console.error("Delete Calendly integration error:", error);
     return NextResponse.json(
-      { error: "Failed to disconnect integration" },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to disconnect integration",
+      },
       { status: 500 }
     );
   }
@@ -118,112 +85,33 @@ export async function DELETE(request: NextRequest) {
 
 /**
  * POST: Refresh Calendly access token
- * Uses refresh token to get new access token
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get user ID from request body
     const body = await request.json();
-    const userId = body.user_id;
 
-    if (!userId) {
-      return NextResponse.json({ error: "Missing user ID" }, { status: 400 });
-    }
+    // Validate input
+    const validatedData = calendlyTokenRefreshSchema.parse(body);
 
-    // Get current integration with refresh token
-    const { data: integration, error: fetchError } = await supabase
-      .from("calendly_integrations")
-      .select("refresh_token")
-      .eq("user_id", userId)
-      .eq("integration_status", "active")
-      .single();
+    // Refresh token
+    const result = await refreshCalendlyToken(validatedData.user_id);
 
-    if (fetchError || !integration?.refresh_token) {
-      return NextResponse.json(
-        { error: "No active integration found" },
-        { status: 404 }
-      );
-    }
-
-    // Ensure environment variables are defined
-    const clientId = process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID;
-    const clientSecret = process.env.CALENDLY_CLIENT_SECRET;
-
-    if (!clientId || !clientSecret) {
-      console.error("Missing Calendly environment variables for token refresh");
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
-      );
-    }
-
-    // Refresh the token with Calendly
-    const refreshParams = new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: integration.refresh_token,
-      grant_type: "refresh_token",
-    });
-
-    const refreshResponse = await fetch(
-      "https://auth.calendly.com/oauth/token",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: refreshParams,
-      }
-    );
-
-    if (!refreshResponse.ok) {
-      const errorText = await refreshResponse.text();
-      console.error("Token refresh failed:", errorText);
-
-      // If refresh fails, it might mean the refresh token is invalid
-      // Mark integration as error status
-      await supabase
-        .from("calendly_integrations")
-        .update({
-          integration_status: "error",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", userId);
-
-      throw new Error("Failed to refresh token - user may need to reconnect");
-    }
-
-    const tokenData = await refreshResponse.json();
-
-    // Update stored tokens
-    const { error: updateError } = await supabase
-      .from("calendly_integrations")
-      .update({
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token || integration.refresh_token,
-        token_expires_at: tokenData.expires_in
-          ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
-          : null,
-        integration_status: "active", // Ensure status is active after successful refresh
-        last_sync_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId);
-
-    if (updateError) {
-      throw updateError;
-    }
-
-    console.log(`Successfully refreshed tokens for user: ${userId}`);
-
-    return NextResponse.json({
-      success: true,
-      message: "Token refreshed successfully",
-    });
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Token refresh error:", error);
+
+    if (error instanceof Error && error.message.includes("validation")) {
+      return NextResponse.json(
+        { error: "Invalid request parameters" },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Failed to refresh token" },
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to refresh token",
+      },
       { status: 500 }
     );
   }

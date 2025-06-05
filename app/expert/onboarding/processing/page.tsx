@@ -134,8 +134,8 @@ export default function ProcessingPage() {
       await processStep(3, 'complete', 'completed');
 
       // Wait a moment to show completion, then redirect
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      router.push('/expert/dashboard');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      router.push('/');
 
     } catch (error) {
       console.error('Processing error:', error);

@@ -263,7 +263,7 @@ const SignUpForm = () => {
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold mt-6"
+                className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold mt-6 cursor-pointer"
               >
                 {loading ? 'Creating account...' : 'Create Account'}
               </Button>
@@ -275,7 +275,7 @@ const SignUpForm = () => {
             <span className="text-gray-600 text-sm">Already have an account? </span>
             <button
               onClick={() => router.push('/sign-in')}
-              className="text-blue-600 hover:text-blue-500 font-medium text-sm"
+              className="text-blue-600 hover:text-blue-500 font-medium text-sm cursor-pointer"
             >
               Sign In
             </button>

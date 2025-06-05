@@ -27,6 +27,7 @@ export const signUpUser = async (
           last_name: data.lastName,
           user_type: userType,
         },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
 
@@ -60,7 +61,25 @@ export const signUpUser = async (
 
     console.log("Signup successful for user:", authData.user.id);
 
-    // Determine redirect path based on user type
+    // 3. Check if email confirmation is required
+    if (!authData.user.email_confirmed_at) {
+      console.log(
+        "Email confirmation required, redirecting to confirmation page"
+      );
+
+      // Redirect to email confirmation page with email and user type
+      const confirmationUrl = `/confirm-email?email=${encodeURIComponent(
+        data.email
+      )}&type=${userType}`;
+
+      return {
+        success: true,
+        user: authData.user,
+        redirectTo: confirmationUrl,
+      };
+    }
+
+    // 4. If email is already confirmed (unlikely for new signups), redirect normally
     const redirectTo =
       userType === "expert" ? "/expert/onboarding/profile" : "/";
 
@@ -111,6 +130,29 @@ export const signInUser = async (data: SignInFormData): Promise<AuthResult> => {
       return { success: false, error: "Sign in failed. Please try again." };
     }
 
+    // Check if email is confirmed
+    if (!authData.user.email_confirmed_at) {
+      console.log("Email not confirmed, redirecting to confirmation page");
+
+      // Get user profile to determine user type
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("user_type")
+        .eq("id", authData.user.id)
+        .single();
+
+      const userType = profile?.user_type || "client";
+      const confirmationUrl = `/confirm-email?email=${encodeURIComponent(
+        authData.user.email || ""
+      )}&type=${userType}`;
+
+      return {
+        success: true,
+        user: authData.user,
+        redirectTo: confirmationUrl,
+      };
+    }
+
     // Check user profile and onboarding status
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
@@ -132,10 +174,32 @@ export const signInUser = async (data: SignInFormData): Promise<AuthResult> => {
     let redirectTo = "/";
 
     if (profile.user_type === "expert" && !profile.onboarding_completed) {
-      redirectTo = "/expert/onboarding/profile";
-      console.log("Expert needs onboarding, redirecting to:", redirectTo);
+      // Redirect based on current onboarding step
+      switch (profile.onboarding_step) {
+        case 1:
+          redirectTo = "/expert/onboarding/profile";
+          break;
+        case 2:
+          redirectTo = "/expert/onboarding/calendly";
+          break;
+        case 3:
+          redirectTo = "/expert/onboarding/availability";
+          break;
+        case 4:
+          redirectTo = "/expert/onboarding/session-details";
+          break;
+        case 5:
+          redirectTo = "/expert/onboarding/processing";
+          break;
+        default:
+          redirectTo = "/expert/onboarding/profile"; // Fallback to start
+      }
+      console.log(
+        `Expert on step ${profile.onboarding_step}, redirecting to:`,
+        redirectTo
+      );
     } else if (profile.user_type === "expert" && profile.onboarding_completed) {
-      redirectTo = "/";
+      redirectTo = "/expert/dashboard";
       console.log("Expert onboarding complete, redirecting to dashboard");
     } else if (profile.user_type === "client") {
       redirectTo = "/";

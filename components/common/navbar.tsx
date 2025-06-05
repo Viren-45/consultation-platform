@@ -15,12 +15,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser, signOutUser } from '@/lib/auth';
 import supabase from '@/lib/supabase-client';
+import Image from 'next/image';
 
 interface UserProfile {
   id: string;
   first_name: string;
   last_name: string;
   user_type: 'client' | 'expert';
+  profile_picture_url?: string;
 }
 
 const Navbar = () => {
@@ -28,6 +30,7 @@ const Navbar = () => {
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     // Get initial user
@@ -60,7 +63,7 @@ const Navbar = () => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, first_name, last_name, user_type')
+        .select('id, first_name, last_name, user_type, profile_picture_url')
         .eq('id', userId)
         .single();
 
@@ -68,6 +71,7 @@ const Navbar = () => {
         console.error('Error fetching user profile:', error);
       } else {
         setUserProfile(data);
+        setImageError(false); // Reset image error when profile loads
       }
     } catch (error) {
       console.error('Unexpected error fetching profile:', error);
@@ -103,6 +107,51 @@ const Navbar = () => {
       return `${user.user_metadata.first_name} ${user.user_metadata.last_name}`;
     }
     return user?.email || 'User';
+  };
+
+  const handleImageError = () => {
+    setImageError(true);
+  };
+
+  const renderUserAvatar = () => {
+    const hasProfilePicture = userProfile?.profile_picture_url && !imageError;
+
+    if (hasProfilePicture) {
+      return (
+        <div className="w-8 h-8 rounded-full overflow-hidden shadow-sm">
+          <Image
+            src={userProfile.profile_picture_url!}
+            alt={`${getUserName()}'s profile`}
+            width={32}
+            height={32}
+            className="w-full h-full object-cover"
+            onError={handleImageError}
+          />
+        </div>
+      );
+    }
+
+    // Fallback to initial avatar
+    return (
+      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-semibold text-sm shadow-sm">
+        {getUserInitial()}
+      </div>
+    );
+  };
+
+  const getUserTypeBadge = () => {
+    if (!userProfile?.user_type) return null;
+
+    const badgeColors = {
+      client: 'bg-green-100 text-green-700 border-green-200',
+      expert: 'bg-blue-100 text-blue-700 border-blue-200'
+    };
+
+    return (
+      <div className={`px-3 py-1 rounded-full text-xs font-medium border ${badgeColors[userProfile.user_type]}`}>
+        {userProfile.user_type === 'client' ? 'Client' : 'Expert'}
+      </div>
+    );
   };
 
   return (
@@ -145,13 +194,9 @@ const Navbar = () => {
           </Link>
         </div>
 
-        {/* Toggle Switch (Placeholder for now) */}
-        <div className="flex items-center space-x-2 px-3 py-1 bg-gray-100 rounded-full">
-          <span className="text-sm font-medium text-blue-600">For Clients</span>
-          <div className="w-10 h-5 bg-blue-600 rounded-full relative cursor-pointer">
-            <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform"></div>
-          </div>
-          <span className="text-sm font-medium text-gray-500">For Experts</span>
+        {/* User Type Badge - only shown when user is logged in */}
+        <div className="flex items-center">
+          {user && userProfile && getUserTypeBadge()}
         </div>
 
         {/* Auth Section */}
@@ -164,10 +209,7 @@ const Navbar = () => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center space-x-3 p-1 rounded-full hover:bg-gray-50 transition-colors">
-                  {/* User Avatar */}
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-semibold text-sm shadow-sm">
-                    {getUserInitial()}
-                  </div>
+                  {renderUserAvatar()}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
@@ -175,9 +217,15 @@ const Navbar = () => {
                   <p className="text-sm font-medium text-gray-900">{getUserName()}</p>
                   <p className="text-xs text-gray-500">{user.email}</p>
                   {userProfile?.user_type && (
-                    <p className="text-xs text-blue-600 capitalize font-medium">
-                      {userProfile.user_type}
-                    </p>
+                    <div className="mt-2">
+                      <span className={`inline-flex px-2 py-1 rounded-md text-xs font-medium ${
+                        userProfile.user_type === 'client' 
+                          ? 'bg-green-100 text-green-700' 
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {userProfile.user_type === 'client' ? 'Client Account' : 'Expert Account'}
+                      </span>
+                    </div>
                   )}
                 </div>
                 <DropdownMenuSeparator />

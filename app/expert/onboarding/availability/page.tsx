@@ -48,7 +48,7 @@ export default function AvailabilityOnboardingPage() {
   const loadAvailabilityData = async (userId: string) => {
     try {
       // Fetch current availability status from simplified API
-      const availabilityResponse = await fetch(`/api/calendly/availability?user_id=${userId}`);
+      const availabilityResponse = await fetch(`/api/calendly/fetch-availability?user_id=${userId}`);
       
       if (availabilityResponse.ok) {
         const availabilityData = await availabilityResponse.json();
@@ -98,7 +98,7 @@ export default function AvailabilityOnboardingPage() {
       }
 
       // Simple validation check - just verify Calendly integration is working
-      const validationResponse = await fetch(`/api/calendly/availability?user_id=${userId}`);
+      const validationResponse = await fetch(`/api/calendly/fetch-availability?user_id=${userId}`);
       
       if (!validationResponse.ok) {
         throw new Error('Unable to verify your Calendly integration. Please try refreshing.');

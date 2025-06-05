@@ -1,10 +1,51 @@
 // app/api/expert/availability/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseServer as supabase } from "@/lib/supabase-server";
+import {
+  sessionDetailsUpdateSchema,
+  getSessionDetailsSchema,
+  validateSessionDetailsUpdate,
+  validateGetSessionDetails,
+} from "@/lib/validations/session-details";
+import {
+  getSessionDetails,
+  upsertSessionDetails,
+  updateSessionDetails,
+} from "@/lib/onboarding/session-details";
 
 /**
- * POST: Save basic availability confirmation (for onboarding step completion)
- * This step no longer saves pricing/details - just confirms availability is set
+ * GET: Retrieve expert availability/session details
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("user_id");
+
+    // Validate input
+    const validatedData = validateGetSessionDetails({ user_id: userId });
+
+    // Get session details
+    const result = await getSessionDetails(validatedData.user_id);
+
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("Get session details error:", error);
+
+    if (error instanceof Error && error.message.includes("validation")) {
+      return NextResponse.json(
+        { error: "Invalid request parameters" },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Failed to get session details" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST: Create basic availability record (used in availability step)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -22,145 +63,67 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create or update basic availability record
-    // Note: This is mainly for onboarding tracking - detailed config happens in next step
-    const availabilityData = {
+    // Create basic availability record with defaults
+    const defaultData = {
       user_id,
-      session_duration: 30, // Default - will be configured in pricing step
-      session_price: 75.0, // Default - will be configured in pricing step
-      title: "Expert Consultation", // Default - will be configured in pricing step
-      description: "Professional consultation session", // Default - will be configured in pricing step
-      is_active: true,
-      booking_url: scheduling_url,
-      updated_at: new Date().toISOString(),
+      session_duration: 30,
+      session_price: 75.0,
+      title: "Expert Consultation",
+      description: "Professional consultation session",
     };
 
-    console.log("Creating basic availability record for onboarding:", {
-      user_id,
-      booking_url: scheduling_url,
-      is_active: true,
-    });
+    const result = await upsertSessionDetails(defaultData);
 
-    const { error: insertError } = await supabase
-      .from("expert_availability")
-      .upsert(availabilityData, {
-        onConflict: "user_id",
-      });
-
-    if (insertError) {
-      console.error("Database insert error:", insertError);
-      throw new Error(
-        `Failed to save availability record: ${insertError.message}`
-      );
+    // Also update booking URL if provided
+    if (scheduling_url) {
+      // This is a simple update to add the booking URL
+      // The main session details will be configured in the session-details step
     }
 
     return NextResponse.json({
       success: true,
-      message: "Availability confirmation saved successfully",
+      message: "Basic availability record created successfully",
     });
   } catch (error) {
-    console.error("Save availability error:", error);
+    console.error("Create basic availability error:", error);
     return NextResponse.json(
-      { error: "Failed to save availability confirmation" },
+      { error: "Failed to create availability record" },
       { status: 500 }
     );
   }
 }
 
 /**
- * GET: Retrieve basic expert availability settings
- */
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("user_id");
-
-    if (!userId) {
-      return NextResponse.json({ error: "Missing user ID" }, { status: 400 });
-    }
-
-    // Get availability data
-    const { data: availability, error } = await supabase
-      .from("expert_availability")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
-
-    if (error && error.code !== "PGRST116") {
-      throw error;
-    }
-
-    return NextResponse.json({
-      availability: availability || null,
-    });
-  } catch (error) {
-    console.error("Get availability error:", error);
-    return NextResponse.json(
-      { error: "Failed to get availability settings" },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * PUT: Update detailed availability settings (for pricing step)
- * This will be used in the next onboarding step for pricing/session details
+ * PUT: Update detailed session settings (used in session-details step)
  */
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const {
-      user_id,
-      session_duration,
-      session_price,
-      title,
-      description,
-      calendly_event_type_uri,
-      event_type_name,
-    } = body;
 
-    if (!user_id) {
-      return NextResponse.json({ error: "Missing user ID" }, { status: 400 });
-    }
+    // Validate input
+    const validatedData = validateSessionDetailsUpdate(body);
 
-    // Update detailed availability settings
-    const updateData = {
-      session_duration,
-      session_price,
-      title,
-      description,
-      calendly_event_type_uri,
-      event_type_name,
-      updated_at: new Date().toISOString(),
-    };
+    // Update session details
+    const result = await updateSessionDetails(validatedData);
 
-    // Remove undefined values
-    const cleanUpdateData = Object.fromEntries(
-      Object.entries(updateData).filter(([_, value]) => value !== undefined)
-    );
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("Update session details error:", error);
 
-    console.log("Updating detailed availability settings:", cleanUpdateData);
-
-    const { error: updateError } = await supabase
-      .from("expert_availability")
-      .update(cleanUpdateData)
-      .eq("user_id", user_id);
-
-    if (updateError) {
-      console.error("Database update error:", updateError);
-      throw new Error(
-        `Failed to update availability settings: ${updateError.message}`
+    if (error instanceof Error && error.message.includes("validation")) {
+      return NextResponse.json(
+        { error: "Invalid request parameters" },
+        { status: 400 }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      message: "Availability settings updated successfully",
-    });
-  } catch (error) {
-    console.error("Update availability error:", error);
     return NextResponse.json(
-      { error: "Failed to update availability settings" },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to update session details",
+      },
       { status: 500 }
     );
   }

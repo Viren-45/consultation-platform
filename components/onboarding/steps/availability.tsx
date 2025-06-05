@@ -51,7 +51,7 @@ const AvailabilityOnboarding = ({
       }
       
       // Fetch latest availability data from Calendly API
-      const response = await fetch(`/api/calendly/availability?user_id=${user.id}`);
+      const response = await fetch(`/api/calendly/fetch-availability?user_id=${user.id}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -201,7 +201,7 @@ const AvailabilityOnboarding = ({
           <Button
             type="button"
             onClick={handleConfigureHours}
-            className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 justify-center"
+            className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 justify-center cursor-pointer"
           >
             <Settings className="w-4 h-4" />
             Configure Hours
@@ -213,7 +213,7 @@ const AvailabilityOnboarding = ({
             variant="outline"
             onClick={handleRefreshAvailability}
             disabled={refreshing}
-            className="flex items-center gap-2 justify-center"
+            className="flex items-center gap-2 justify-center cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             {refreshing ? 'Refreshing...' : 'Refresh Calendar'}

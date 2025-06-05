@@ -1,32 +1,35 @@
-// lib/onboarding-steps.ts
 export const ONBOARDING_STEPS = {
   profile: 1,
-  availability: 2,
-  pricing: 3,
-  review: 4,
+  calendly: 2,
+  availability: 3,
+  sessionDetails: 4,
+  processing: 5,
+  complete: 6,
 } as const;
 
 export const STEP_NAMES = {
   1: "profile",
-  2: "availability",
-  3: "pricing",
-  4: "review",
+  2: "calendly",
+  3: "availability",
+  4: "sessionDetails",
+  5: "processing",
+  6: "complete",
 } as const;
-
-export type OnboardingStep = keyof typeof ONBOARDING_STEPS;
-export type StepNumber = (typeof ONBOARDING_STEPS)[OnboardingStep];
-
-export const getStepNumber = (stepName: OnboardingStep): StepNumber => {
-  return ONBOARDING_STEPS[stepName];
-};
-
-export const getStepName = (stepNumber: StepNumber): OnboardingStep => {
-  return STEP_NAMES[stepNumber];
-};
 
 export const STEP_TITLES = {
   profile: "Build Your Profile",
+  calendly: "Connect Calendly",
   availability: "Set Your Availability",
-  pricing: "Set Your Rates",
-  review: "Review & Launch",
+  "session-details": "Configure Sessions",
+  processing: "Processing Profile",
+  complete: "Complete",
+} as const;
+
+export const STEP_ROUTES = {
+  1: "/expert/onboarding/profile",
+  2: "/expert/onboarding/calendly",
+  3: "/expert/onboarding/availability",
+  4: "/expert/onboarding/session-details",
+  5: "/expert/onboarding/processing",
+  6: "/", // Completed
 } as const;

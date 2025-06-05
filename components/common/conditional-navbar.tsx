@@ -11,6 +11,7 @@ const ConditionalNavbar = () => {
     '/get-started',
     '/sign-up',
     '/sign-in',
+    '/confirm-email',
     '/expert/onboarding/profile',
     '/expert/onboarding/calendly',
     '/expert/onboarding/availability',
